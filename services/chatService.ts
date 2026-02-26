@@ -1,28 +1,28 @@
-import { databases, ID, Query, DB_ID, COLLECTIONS } from '@/lib/appwrite';
 import { ChatMessage } from '@/types';
+
+const api = (path: string) => `/api/db${path}`;
 
 export const chatService = {
   async getHistory(userId: string): Promise<ChatMessage[]> {
-    const res = await databases.listDocuments(DB_ID, COLLECTIONS.CHAT, [
-      Query.equal('userId', userId),
-      Query.orderAsc('$createdAt'),
-      Query.limit(100),
-    ]);
-    return res.documents as unknown as ChatMessage[];
+    const res = await fetch(`${api('/chat')}?userId=${userId}`);
+    const data = await res.json();
+    return (data.documents || []).sort((a: ChatMessage, b: ChatMessage) =>
+      new Date(a.$createdAt).getTime() - new Date(b.$createdAt).getTime()
+    );
   },
 
-  async saveMessage(data: {
-    userId: string;
-    role: 'user' | 'assistant';
-    content: string;
-  }): Promise<ChatMessage> {
-    const doc = await databases.createDocument(DB_ID, COLLECTIONS.CHAT, ID.unique(), data);
-    return doc as unknown as ChatMessage;
+  async saveMessage(data: { userId: string; role: 'user' | 'assistant'; content: string }): Promise<ChatMessage> {
+    const res = await fetch(api('/chat'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return res.json();
   },
 
   async clearHistory(userId: string): Promise<void> {
     const messages = await chatService.getHistory(userId);
-    await Promise.all(messages.map((m) => databases.deleteDocument(DB_ID, COLLECTIONS.CHAT, m.$id)));
+    await Promise.all(messages.map((m) => fetch(api(`/chat/${m.$id}`), { method: 'DELETE' })));
   },
 
   async sendMessage(messages: { role: string; content: string }[]): Promise<string> {

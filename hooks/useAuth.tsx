@@ -1,10 +1,9 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { account } from '@/lib/appwrite';
 import { AppwriteUser } from '@/types';
-import { login, logout, register } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 interface AuthContextType {
   user: AppwriteUser | null;
@@ -22,29 +21,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  // Check session on mount via server route (no CORS issues)
   useEffect(() => {
-    account.get()
-      .then((u) => setUser(u as unknown as AppwriteUser))
+    fetch('/api/auth/me')
+      .then((r) => r.json())
+      .then((data) => setUser(data.user || null))
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
 
   const handleLogin = async (email: string, password: string) => {
-    await login(email, password);
-    const u = await account.get();
-    setUser(u as unknown as AppwriteUser);
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Login failed');
+
+    setUser(data.user);
     router.push('/');
   };
 
   const handleRegister = async (name: string, email: string, password: string) => {
-    await register(name, email, password);
-    const u = await account.get();
-    setUser(u as unknown as AppwriteUser);
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Registration failed');
+
+    // Fetch user details after registration
+    const me = await fetch('/api/auth/me').then((r) => r.json());
+    setUser(me.user);
+    toast.success('Account created! Welcome 🎉');
     router.push('/');
   };
 
   const handleLogout = async () => {
-    await logout();
+    await fetch('/api/auth/logout', { method: 'POST' });
     setUser(null);
     router.push('/login');
   };
@@ -52,7 +70,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdmin = user?.labels?.includes('admin') ?? false;
 
   return (
-    <AuthContext.Provider value={{ user, loading, login: handleLogin, register: handleRegister, logout: handleLogout, isAdmin }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        login: handleLogin,
+        register: handleRegister,
+        logout: handleLogout,
+        isAdmin,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

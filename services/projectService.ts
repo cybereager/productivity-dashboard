@@ -1,32 +1,33 @@
-import { databases, ID, Query, DB_ID, COLLECTIONS } from '@/lib/appwrite';
 import { Project, ProjectStatus } from '@/types';
+
+const api = (path: string) => `/api/db${path}`;
 
 export const projectService = {
   async getAll(userId: string): Promise<Project[]> {
-    const res = await databases.listDocuments(DB_ID, COLLECTIONS.PROJECTS, [
-      Query.equal('userId', userId),
-      Query.orderDesc('$createdAt'),
-    ]);
-    return res.documents as unknown as Project[];
+    const res = await fetch(`${api('/projects')}?userId=${userId}`);
+    const data = await res.json();
+    return data.documents || [];
   },
 
-  async create(data: {
-    userId: string;
-    name: string;
-    description?: string;
-    status: ProjectStatus;
-    progress: number;
-  }): Promise<Project> {
-    const doc = await databases.createDocument(DB_ID, COLLECTIONS.PROJECTS, ID.unique(), data);
-    return doc as unknown as Project;
+  async create(data: { userId: string; name: string; description?: string; status: ProjectStatus; progress: number }): Promise<Project> {
+    const res = await fetch(api('/projects'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return res.json();
   },
 
   async update(id: string, data: Partial<Project>): Promise<Project> {
-    const doc = await databases.updateDocument(DB_ID, COLLECTIONS.PROJECTS, id, data);
-    return doc as unknown as Project;
+    const res = await fetch(api(`/projects/${id}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return res.json();
   },
 
   async delete(id: string): Promise<void> {
-    await databases.deleteDocument(DB_ID, COLLECTIONS.PROJECTS, id);
+    await fetch(api(`/projects/${id}`), { method: 'DELETE' });
   },
 };
